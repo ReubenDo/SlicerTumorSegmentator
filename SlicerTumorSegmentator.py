@@ -21,9 +21,10 @@ try:
    from HD_BET.run import run_hd_bet
 except:
   slicer.util.pip_install('git+https://github.com/ReubenDo/HD-BET#egg=HD-BET')
-  # slicer.util.pip_install('tumorsegmentator')
   from HD_BET.run import run_hd_bet
-  
+
+import HD_BET.paths
+os.makedirs(HD_BET.paths.folder_with_parameter_files, exist_ok=True)
 from pathlib import Path
 #
 # SlicerTumorSegmentator
@@ -439,7 +440,7 @@ class SlicerTumorSegmentatorLogic(ScriptedLoadableModuleLogic):
     
     
     if torch.backends.cuda.is_built() and torch.cuda.is_available():
-      device = "cuda"
+      device = "gpu"
     else:
       device = "cpu"
     tempFolder = slicer.util.tempDirectory()
@@ -516,12 +517,13 @@ class SlicerTumorSegmentatorLogic(ScriptedLoadableModuleLogic):
         
         inputFileTemp = os.path.join(tempFolder, file)
         self.log(f"Performing co-registered input file to {inputFileTemp}")
-        BRAINSFITExecutablePath = shutil.which('BRAINSFit')
+        BRAINSFITExecutablePath = shutil.which('Slicer')
+        BRAINSFITCommand = [BRAINSFITExecutablePath, '--launch', 'BRAINSFit']
         options_brainsfit = ['--fixedVolume', refFile, 
                              '--movingVolume', inputFileTemp, 
                              '--outputVolume', inputFileTemp]  
-        self.log(' '.join([BRAINSFITExecutablePath] + options_brainsfit))    
-        proc = slicer.util.launchConsoleProcess([BRAINSFITExecutablePath] + options_brainsfit + PARAMETERS_BRAINSFIT)
+        # self.log(' '.join([BRAINSFITExecutablePath] + options_brainsfit))    
+        proc = slicer.util.launchConsoleProcess(BRAINSFITCommand + options_brainsfit + PARAMETERS_BRAINSFIT)
         self.logProcessOutput(proc)
         
         
@@ -531,7 +533,8 @@ class SlicerTumorSegmentatorLogic(ScriptedLoadableModuleLogic):
       output_sk = tempFolder+"/tumor-segmentator-ref_masked.nii.gz"
       HDBETExecutablePath = os.path.join(sysconfig.get_path('scripts'), "hd-bet")
       HDBETCommand = [ pythonSlicerExecutablePath, HDBETExecutablePath]
-      options_hdbet = ['-i', refFile, '-o', output_sk, '-device', device, '-mode', 'fast', '-tta', '0']
+      device_hdbet = "0" if device=="gpu" else "cpu"
+      options_hdbet = ['-i', refFile, '-o', output_sk, '-device', device_hdbet, '-mode', 'fast', '-tta', '0']
       self.log(f"Tumor Segmentator arguments: {HDBETCommand + options_hdbet}")
       proc = slicer.util.launchConsoleProcess(HDBETCommand + options_hdbet)
       self.logProcessOutput(proc)
@@ -552,8 +555,10 @@ class SlicerTumorSegmentatorLogic(ScriptedLoadableModuleLogic):
 
     # Get TumorSegmentator launcher command
     # TumorSegmentator (.py file, without extension) is installed in Python Scripts folder
-    
-    TumorSegmentatorExecutablePath = os.path.join(sysconfig.get_path('scripts'), "TumorSegmentator")
+    if os.name == 'nt':
+      TumorSegmentatorExecutablePath = os.path.join(sysconfig.get_path('scripts'), "TumorSegmentator.exe")
+    else:
+      TumorSegmentatorExecutablePath = os.path.join(sysconfig.get_path('scripts'), "TumorSegmentator")
     # TumorSegmentatorExecutablePath = "TumorSegmentator"
     # Get Python executable path
     TumorSegmentatorCommand = [ pythonSlicerExecutablePath, TumorSegmentatorExecutablePath]
